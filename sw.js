@@ -1,5 +1,6 @@
 // Service worker : met toute l'app en cache pour un fonctionnement 100 % hors-ligne.
-const CACHE = 'tabata-v1';
+// Passe CACHE à 'tabata-v3', 'v4'… à chaque mise à jour pour forcer le renouvellement.
+const CACHE = 'tabata-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -23,17 +24,38 @@ self.addEventListener('activate', e => {
 });
 
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
+  const req = e.request;
+  if (req.method !== 'GET') return;
+
+  // Page principale : réseau d'abord (nouvelle version dès qu'il y a du réseau),
+  // sinon cache (hors-ligne). Délai de 3 s pour ne pas rester bloqué sur un mauvais wifi.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      Promise.race([
+        fetch(req).then(res => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put('./index.html', copy));
+          }
+          return res;
+        }),
+        new Promise((_, rej) => setTimeout(rej, 3000))
+      ]).catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  // Le reste : cache d'abord, mise à jour en arrière-plan.
   e.respondWith(
-    caches.match(e.request).then(hit => {
-      const fresh = fetch(e.request).then(res => {
-        if (res && res.ok && new URL(e.request.url).origin === location.origin) {
+    caches.match(req).then(hit => {
+      const fresh = fetch(req).then(res => {
+        if (res && res.ok && new URL(req.url).origin === location.origin) {
           const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, copy));
+          caches.open(CACHE).then(c => c.put(req, copy));
         }
         return res;
-      }).catch(() => hit || caches.match('./index.html'));
-      return hit || fresh;   // cache d'abord, mise à jour en arrière-plan
+      }).catch(() => hit);
+      return hit || fresh;
     })
   );
 });

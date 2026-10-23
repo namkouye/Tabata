@@ -40,7 +40,7 @@
   #app[data-screen=setup] #setup{display:flex}
   #app[data-screen=run] #run{display:flex}
 
-  button{font:inherit;color:inherit;border:0;cursor:pointer}
+  button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulation;-webkit-touch-callout:none}
   button:focus-visible,input:focus-visible{outline:3px solid #fff;outline-offset:2px}
 
   /* ---------- Réglages ---------- */
@@ -106,10 +106,35 @@
   .link{background:none;opacity:.85;padding:12px 18px;font-size:1rem;text-decoration:underline;text-underline-offset:4px}
 
   #run .done-actions{display:none;flex-direction:column;gap:10px;width:100%;margin-top:22px}
-  #run[data-done=true] .controls,#run[data-done=true] #stop,#run[data-done=true] #nextUp{display:none}
+  #run[data-done=true] .controls,#run[data-done=true] .links,#run[data-done=true] #nextUp{display:none}
   #run[data-done=true] .done-actions{display:flex}
   .big{padding:18px;border-radius:16px;background:#fff;color:#111;font-weight:800;font-size:1.1rem}
   .ghost{padding:16px;border-radius:16px;background:rgba(255,255,255,.18);font-weight:650;font-size:1.05rem}
+
+  .links{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+
+  /* ---------- Écran verrouillé (noir = économie de batterie sur OLED) ---------- */
+  #lockscreen{
+    position:fixed;inset:0;z-index:50;background:#000;color:var(--c,#888);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
+    text-align:center;touch-action:none;-webkit-touch-callout:none;
+  }
+  html[data-phase=prep] #lockscreen{--c:#d97706}
+  html[data-phase=work] #lockscreen{--c:#ef4444}
+  html[data-phase=rest] #lockscreen{--c:#22c55e}
+  #lockscreen .ls-top{
+    position:absolute;top:calc(20px + var(--safe-t));left:20px;right:20px;
+    display:flex;justify-content:space-between;font-weight:650;opacity:.75;font-variant-numeric:tabular-nums;
+  }
+  #lsPhase{font-weight:800;letter-spacing:.14em;font-size:1.2rem}
+  #lsTime{font-weight:800;font-size:clamp(5rem,30vw,10rem);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  #unlock{
+    position:absolute;bottom:calc(28px + var(--safe-b));left:20px;right:20px;max-width:360px;margin:0 auto;
+    padding:18px;border-radius:16px;background:#0d0d0d;color:#80858f;border:1px solid #222;overflow:hidden;font-size:1rem;
+  }
+  #unlock::before{content:"";position:absolute;inset:0;width:0;background:#2a2f3a}
+  #unlock span{position:relative}
+  #unlock.holding::before{width:100%;transition:width 1.2s linear}
 
   @media (max-height:640px){
     .dial{width:min(70vw,44dvh)}
@@ -208,13 +233,24 @@
         <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5l10.5 7L4 19z"/></svg>
       </button>
     </div>
-    <button class="link" id="stop">Arrêter</button>
+    <div class="links">
+      <button class="link" id="lock">Verrouiller l'écran</button>
+      <button class="link" id="stop">Arrêter</button>
+    </div>
 
     <div class="done-actions">
       <button class="big" id="again">Recommencer</button>
       <button class="ghost" id="back">Modifier les réglages</button>
     </div>
   </section>
+</div>
+
+<!-- Écran verrouillé : ignore tous les toucher, déverrouillage par appui long -->
+<div id="lockscreen" hidden>
+  <div class="ls-top"><span id="lsRound"></span><span id="lsLeft"></span></div>
+  <div id="lsPhase"></div>
+  <div id="lsTime"></div>
+  <button id="unlock"><span>Maintiens pour déverrouiller</span></button>
 </div>
 
 <script>
@@ -226,7 +262,7 @@
   /* ---------------- Réglages ---------------- */
   const STORE = 'tabata-settings-v1';
   const DEFAULTS = { prep: 10, work: 20, rest: 10, rounds: 8, sound: true, vibrate: true, ticks: false };
-  const LIMITS = { prep: [0, 300, 5], work: [1, 3599, 5], rest: [0, 3599, 5], rounds: [1, 99, 1] };
+  const LIMITS = { prep: [0, 300, 1], work: [1, 3599, 1], rest: [0, 3599, 1], rounds: [1, 99, 1] };  // [min, max, pas]
   const KEYS = Object.keys(LIMITS);
 
   let cfg = load();
@@ -262,10 +298,26 @@
 
   $$('.field').forEach(row => {
     const k = row.dataset.key, input = $('input', row);
-    $$('.step', row).forEach(btn => btn.addEventListener('click', () => {
-      cfg[k] = clamp(k, cfg[k] + (+btn.dataset.step) * LIMITS[k][2]);
-      input.value = cfg[k]; save(); renderHints();
-    }));
+    $$('.step', row).forEach(btn => {
+      const dir = +btn.dataset.step;
+      let t1 = null, t2 = null, n = 0;
+      const apply = (mult = 1) => {
+        cfg[k] = clamp(k, cfg[k] + dir * LIMITS[k][2] * mult);
+        input.value = cfg[k]; save(); renderHints();
+      };
+      const halt = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = null; };
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault(); halt(); n = 0; apply();
+        t1 = setTimeout(() => {           // appui long : répétition, de plus en plus rapide
+          t2 = setInterval(() => { n++; apply(n > 20 && k !== 'rounds' ? 5 : 1); }, 85);
+        }, 450);
+      });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, halt));
+      btn.addEventListener('contextmenu', e => e.preventDefault());
+      btn.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apply(); }
+      });
+    });
     input.addEventListener('input', () => {
       const v = parseInt(input.value, 10);
       if (Number.isNaN(v)) return;
@@ -281,69 +333,95 @@
   $$('[data-toggle]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.toggle; cfg[k] = !cfg[k];
     b.setAttribute('aria-pressed', String(cfg[k])); save();
-    if (k === 'sound' && cfg.sound) bell(2); // petit aperçu + déverrouillage audio
+    if (k === 'sound' && cfg.sound) { primeAudio(); bell(2); } // aperçu du son
   }));
   $$('[data-preset]').forEach(b => b.addEventListener('click', () => {
     const [prep, work, rest, rounds] = b.dataset.preset.split(',').map(Number);
     Object.assign(cfg, { prep, work, rest, rounds }); save(); renderFields();
   }));
 
-  /* ---------------- Cloche de boxe (synthétisée) ---------------- */
-  let ctx = null, master = null;
-  function audio() {
-    if (!ctx) {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return null;
-      ctx = new AC();
-      const comp = ctx.createDynamicsCompressor();
-      master = ctx.createGain(); master.gain.value = 0.55;
-      master.connect(comp); comp.connect(ctx.destination);
-    }
-    if (ctx.state === 'suspended') ctx.resume();
-    return ctx;
-  }
-
+  /* ---------------- Cloche de boxe : WAV synthétisé joué via <audio> ----------------
+     Sur iPhone, Web Audio est coupé par l'interrupteur silencieux et reste souvent muet ;
+     un élément <audio> lancé après un toucher sonne de façon fiable. */
+  const SR = 22050;
   // [rapport de fréquence, amplitude, durée d'extinction en s]
   const PARTIALS = [
     [0.5, 0.30, 1.6], [1, 1.00, 1.5], [2.01, 0.50, 1.1],
     [2.76, 0.45, 0.9], [4.2, 0.25, 0.55], [5.95, 0.15, 0.35]
   ];
-  function strike(t, f0 = 1100, vol = 1) {
-    PARTIALS.forEach(([ratio, amp, dec]) => {
-      [1, 1.004].forEach((detune, i) => {           // léger battement = timbre métallique
-        if (i === 1 && ratio !== 1) return;
-        const o = ctx.createOscillator(), g = ctx.createGain();
-        o.type = 'sine'; o.frequency.value = f0 * ratio * detune;
-        const a = amp * vol * (i ? 0.5 : 1) * 0.55;
-        g.gain.setValueAtTime(0.0001, t);
-        g.gain.exponentialRampToValueAtTime(a, t + 0.003);
-        g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
-        o.connect(g); g.connect(master);
-        o.start(t); o.stop(t + dec + 0.05);
+  function toWavUrl(f) {
+    const n = f.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
+    const wr = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
+    wr(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); wr(8, 'WAVE'); wr(12, 'fmt ');
+    v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+    v.setUint32(24, SR, true); v.setUint32(28, SR * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+    wr(36, 'data'); v.setUint32(40, n * 2, true);
+    for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, f[i])) * 32767, true);
+    return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+  }
+  function synthBell(strikes, gap) {
+    const n = Math.floor(SR * ((strikes - 1) * gap + 1.9)), out = new Float32Array(n);
+    for (let s = 0; s < strikes; s++) {
+      const i0 = Math.floor(s * gap * SR);
+      PARTIALS.forEach(([ratio, amp, dec]) => {
+        [1, 1.004].forEach((det, di) => {      // léger battement = timbre métallique
+          if (di && ratio !== 1) return;
+          const w = 2 * Math.PI * 1100 * ratio * det / SR;
+          const a = amp * 0.55 * (di ? 0.5 : 1);
+          const k = Math.log(a / 0.0001) / dec, len = Math.floor((dec + 0.05) * SR);
+          for (let j = 0; j < len && i0 + j < n; j++) {
+            const t = j / SR;
+            out[i0 + j] += Math.sin(w * j) * (t < 0.003 ? a * t / 0.003 : a * Math.exp(-k * (t - 0.003)));
+          }
+        });
       });
-    });
-    // claquement du marteau sur le métal
-    const n = Math.floor(ctx.sampleRate * 0.03), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
-    const src = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain();
-    src.buffer = buf; hp.type = 'highpass'; hp.frequency.value = 3000; g.gain.value = 0.35 * vol;
-    src.connect(hp); hp.connect(g); g.connect(master); src.start(t);
+      const cl = Math.floor(0.03 * SR); let prev = 0;   // claquement du marteau
+      for (let j = 0; j < cl && i0 + j < n; j++) {
+        const x = Math.random() * 2 - 1;
+        out[i0 + j] += (x - prev) * 0.5 * 0.35 * (1 - j / cl); prev = x;
+      }
+    }
+    let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
+    const g = peak ? 0.9 / peak : 1; for (let i = 0; i < n; i++) out[i] *= g;
+    return toWavUrl(out);
   }
-  function bell(count = 2) {
+  function synthTick() {
+    const n = Math.floor(SR * 0.15), o = new Float32Array(n);
+    for (let j = 0; j < n; j++) {
+      const t = j / SR;
+      o[j] = Math.sin(2 * Math.PI * 880 * t) * (t < 0.005 ? t / 0.005 : Math.exp(-(t - 0.005) * 35)) * 0.8;
+    }
+    return toWavUrl(o);
+  }
+
+  let urls = null, player = null, keep = null, primed = false;
+  function initAudio() {
+    if (urls) return;
+    urls = {
+      bell2: synthBell(2, 0.23), bell3: synthBell(3, 0.23),
+      tick: synthTick(), silence: toWavUrl(new Float32Array(SR))
+    };
+    player = new Audio(); player.preload = 'auto'; player.setAttribute('playsinline', '');
+    keep = new Audio(urls.silence); keep.loop = true; keep.setAttribute('playsinline', '');
+  }
+  // À appeler dans un geste utilisateur : débloque l'audio sur iOS.
+  function primeAudio() {
+    initAudio();
+    if (primed) return;
+    primed = true;
+    player.src = urls.silence;
+    const p = player.play(); if (p) p.catch(() => { primed = false; });
+  }
+  function playSound(name) {
     if (!cfg.sound) return;
-    const c = audio(); if (!c) return;
-    const t = c.currentTime + 0.02;
-    for (let i = 0; i < count; i++) strike(t + i * 0.23);   // "ding-ding"
+    initAudio();
+    try { player.src = urls[name]; const p = player.play(); if (p) p.catch(() => {}); } catch {}
   }
-  function tick() {
-    if (!cfg.sound) return;
-    const c = audio(); if (!c) return;
-    const t = c.currentTime, o = c.createOscillator(), g = c.createGain();
-    o.type = 'sine'; o.frequency.value = 880;
-    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.005);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
-    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.15);
-  }
+  // Boucle silencieuse pendant la séance : garde la session audio « média » active.
+  function startKeepAlive() { initAudio(); const p = keep.play(); if (p) p.catch(() => {}); }
+  function stopKeepAlive() { if (keep) keep.pause(); }
+  const bell = (count = 2) => playSound(count >= 3 ? 'bell3' : 'bell2');   // "ding-ding" / "ding-ding-ding"
+  const tick = () => playSound('tick');
   const buzz = p => { if (cfg.vibrate && navigator.vibrate) navigator.vibrate(p); };
 
   /* ---------------- Écran toujours allumé ---------------- */
@@ -413,6 +491,7 @@
     $('#totalLeft').textContent = `Reste ${mmss(left)}`;
     if (cfg.ticks && secs !== lastSec && secs >= 1 && secs <= 3 && !paused) tick();
     lastSec = secs;
+    if (locked) syncLock();
   }
 
   function step() {
@@ -430,7 +509,7 @@
   }
 
   function start() {
-    audio();                               // déverrouille le son (geste utilisateur)
+    primeAudio(); startKeepAlive();   // geste utilisateur : débloque le son
     phases = build(); idx = 0; running = true; paused = false;
     runEl.dataset.done = 'false'; setPauseIcon();
     app.dataset.screen = 'run';
@@ -442,7 +521,7 @@
   }
 
   function finish() {
-    running = false; clearInterval(timer); unlock();
+    running = false; clearInterval(timer); unlock(); stopKeepAlive(); unlockScreen();
     setPhaseAttr('done');
     runEl.dataset.done = 'true';
     $('#phaseLabel').textContent = 'TERMINÉ';
@@ -454,14 +533,14 @@
   }
 
   function stop() {
-    running = false; paused = false; clearInterval(timer); unlock();
+    running = false; paused = false; clearInterval(timer); unlock(); stopKeepAlive(); unlockScreen();
     setPhaseAttr('idle'); app.dataset.screen = 'setup';
     $('#time').classList.remove('small');
   }
 
   function togglePause() {
     if (!running) return;
-    audio();
+    primeAudio();
     if (!paused) { remMs = endAt - Date.now(); paused = true; }
     else { endAt = Date.now() + remMs; paused = false; lock(); }
     setPauseIcon();
@@ -469,7 +548,7 @@
 
   function skip(dir) {
     if (!running) return;
-    audio();
+    primeAudio();
     const target = idx + dir;
     if (target >= phases.length) { finish(); return; }
     idx = Math.max(0, target);
@@ -479,6 +558,27 @@
     render(remMs);
   }
 
+  /* ---------------- Verrouillage de l'écran (sans mise en veille) ---------------- */
+  let locked = false, holdT = null;
+  const ls = $('#lockscreen'), unlockBtn = $('#unlock');
+  function syncLock() {
+    $('#lsPhase').textContent = $('#phaseLabel').textContent;
+    $('#lsTime').textContent = $('#time').textContent;
+    $('#lsRound').textContent = $('#roundLabel').textContent;
+    $('#lsLeft').textContent = $('#totalLeft').textContent;
+  }
+  function lockScreen() { if (!running) return; locked = true; ls.hidden = false; syncLock(); lock(); }
+  function unlockScreen() { locked = false; ls.hidden = true; clearTimeout(holdT); unlockBtn.classList.remove('holding'); }
+  $('#lock').addEventListener('click', lockScreen);
+  unlockBtn.addEventListener('pointerdown', e => {
+    e.preventDefault(); unlockBtn.classList.add('holding');
+    holdT = setTimeout(unlockScreen, 1200);              // appui long = déverrouille
+  });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev =>
+    unlockBtn.addEventListener(ev, () => { clearTimeout(holdT); unlockBtn.classList.remove('holding'); }));
+  ls.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+  ls.addEventListener('contextmenu', e => e.preventDefault());
+
   $('#start').addEventListener('click', start);
   $('#pause').addEventListener('click', togglePause);
   $('#prev').addEventListener('click', () => skip(-1));
@@ -487,7 +587,7 @@
   $('#again').addEventListener('click', start);
   $('#back').addEventListener('click', stop);
   document.addEventListener('keydown', e => {
-    if (e.code === 'Space' && app.dataset.screen === 'run' && runEl.dataset.done !== 'true') {
+    if (e.code === 'Space' && !locked && app.dataset.screen === 'run' && runEl.dataset.done !== 'true') {
       e.preventDefault(); togglePause();
     }
   });
@@ -510,6 +610,7 @@
 
   setPhaseAttr('idle');
   renderFields();
+  initAudio();   // prépare les sons à l'avance
 })();
 </script>
 </body>
