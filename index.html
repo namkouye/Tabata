@@ -1,0 +1,516 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Tabata Timer</title>
+<meta name="description" content="Chrono Tabata avec cloche de boxe : travail, repos, séries et préparation.">
+<meta name="theme-color" content="#0f1115" id="themeColor">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tabata">
+<style>
+  :root{
+    --bg:#0f1115; --fg:#f4f4f5; --muted:#9aa1ad; --card:#181b22; --line:#272b35; --accent:#ef4444;
+    --safe-t:env(safe-area-inset-top); --safe-b:env(safe-area-inset-bottom);
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  [hidden]{display:none!important}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    transition:background-color .25s ease;
+    -webkit-user-select:none;user-select:none;overscroll-behavior:none;
+  }
+  html[data-phase=prep] body{background:#b45309}
+  html[data-phase=work] body{background:#c81e1e}
+  html[data-phase=rest] body{background:#15803d}
+  html[data-phase=done] body{background:#1e40af}
+
+  #app{
+    min-height:100dvh;display:flex;flex-direction:column;
+    padding:var(--safe-t) env(safe-area-inset-right) var(--safe-b) env(safe-area-inset-left);
+  }
+  section{display:none;flex:1;flex-direction:column;width:100%;max-width:480px;margin:0 auto;padding:20px 20px 24px}
+  #app[data-screen=setup] #setup{display:flex}
+  #app[data-screen=run] #run{display:flex}
+
+  button{font:inherit;color:inherit;border:0;cursor:pointer}
+  button:focus-visible,input:focus-visible{outline:3px solid #fff;outline-offset:2px}
+
+  /* ---------- Réglages ---------- */
+  .head{display:flex;align-items:center;justify-content:space-between;margin:6px 0 18px}
+  h1{margin:0;font-size:1.9rem;font-weight:800;letter-spacing:-.02em}
+  h1 span{color:var(--accent)}
+  .install{background:transparent;border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:.85rem;color:var(--muted)}
+
+  .presets{display:flex;gap:8px;overflow-x:auto;margin:0 -20px 14px;padding:0 20px 4px;scrollbar-width:none}
+  .presets::-webkit-scrollbar{display:none}
+  .chip{flex:none;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:.85rem;color:var(--muted)}
+  .chip:active{transform:scale(.97)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .field{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px}
+  .field + .field{border-top:1px solid var(--line)}
+  .meta{display:flex;flex-direction:column;gap:2px;min-width:0}
+  .meta label{font-weight:650;font-size:1.05rem}
+  .hint{color:var(--muted);font-size:.8rem}
+  .stepper{display:flex;align-items:center;gap:8px;flex:none}
+  .step{width:44px;height:44px;border-radius:12px;background:#232731;font-size:1.5rem;line-height:1;display:grid;place-items:center}
+  .step:active{background:#2e3340}
+  .stepper input{
+    width:72px;height:44px;border-radius:12px;border:1px solid var(--line);background:#0f1115;color:var(--fg);
+    text-align:center;font:700 1.35rem system-ui,sans-serif;font-variant-numeric:tabular-nums;
+    -webkit-user-select:text;user-select:text;-moz-appearance:textfield;appearance:textfield;
+  }
+  .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+
+  .toggles{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
+  .toggle{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:9px 14px;font-size:.88rem;color:var(--muted)}
+  .toggle i{width:10px;height:10px;border-radius:50%;background:#3a3f4b}
+  .toggle[aria-pressed=true]{color:var(--fg);border-color:#3b4150}
+  .toggle[aria-pressed=true] i{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2)}
+
+  .summary{margin-top:auto;padding-top:20px;text-align:center;color:var(--muted);font-size:.95rem}
+  .summary b{color:var(--fg);font-variant-numeric:tabular-nums}
+  .go{
+    margin-top:12px;width:100%;padding:20px;border-radius:18px;background:var(--accent);color:#fff;
+    font-size:1.3rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;
+    box-shadow:0 10px 30px -10px rgba(239,68,68,.7);
+  }
+  .go:active{transform:scale(.99);filter:brightness(.95)}
+
+  /* ---------- Chrono ---------- */
+  #run{color:#fff;align-items:center;text-align:center}
+  .run-top{width:100%;display:flex;justify-content:space-between;font-weight:650;font-size:1.05rem;opacity:.92;font-variant-numeric:tabular-nums;margin-top:8px}
+  .dial{position:relative;width:min(80vw,50dvh,380px);aspect-ratio:1;margin:auto 0}
+  .dial svg{width:100%;height:100%;display:block}
+  .track{fill:none;stroke:rgba(255,255,255,.22);stroke-width:12}
+  .bar{fill:none;stroke:#fff;stroke-width:12;stroke-linecap:round;stroke-dasharray:754;stroke-dashoffset:0}
+  .dial-text{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  #phaseLabel{font-weight:800;letter-spacing:.14em;font-size:clamp(1rem,4.5vw,1.3rem)}
+  #time{font-weight:800;font-size:clamp(4.5rem,24vw,8.5rem);line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.03em}
+  #time.small{font-size:clamp(2.6rem,13vw,4.6rem);letter-spacing:0}
+  #nextUp{min-height:1.5em;opacity:.9;font-size:1rem}
+  .controls{display:flex;align-items:center;justify-content:center;gap:18px;margin:22px 0 6px}
+  .round-btn{width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.18);display:grid;place-items:center}
+  .round-btn:active{background:rgba(255,255,255,.3)}
+  .round-btn svg{width:26px;height:26px;fill:#fff}
+  .round-btn.main{width:92px;height:92px;background:#fff}
+  .round-btn.main svg{width:38px;height:38px;fill:#111}
+  .link{background:none;opacity:.85;padding:12px 18px;font-size:1rem;text-decoration:underline;text-underline-offset:4px}
+
+  #run .done-actions{display:none;flex-direction:column;gap:10px;width:100%;margin-top:22px}
+  #run[data-done=true] .controls,#run[data-done=true] #stop,#run[data-done=true] #nextUp{display:none}
+  #run[data-done=true] .done-actions{display:flex}
+  .big{padding:18px;border-radius:16px;background:#fff;color:#111;font-weight:800;font-size:1.1rem}
+  .ghost{padding:16px;border-radius:16px;background:rgba(255,255,255,.18);font-weight:650;font-size:1.05rem}
+
+  @media (max-height:640px){
+    .dial{width:min(70vw,44dvh)}
+    .round-btn.main{width:76px;height:76px}.round-btn{width:54px;height:54px}
+  }
+  @media (prefers-reduced-motion:reduce){body{transition:none}}
+</style>
+</head>
+<body>
+<div id="app" data-screen="setup">
+
+  <!-- ========== RÉGLAGES ========== -->
+  <section id="setup">
+    <div class="head">
+      <h1>Tabata<span>.</span></h1>
+      <button class="install" id="install" hidden>Installer</button>
+    </div>
+
+    <div class="presets" aria-label="Préréglages">
+      <button class="chip" data-preset="10,20,10,8">Tabata 20/10 × 8</button>
+      <button class="chip" data-preset="10,30,30,10">30/30 × 10</button>
+      <button class="chip" data-preset="10,40,20,8">40/20 × 8</button>
+      <button class="chip" data-preset="10,180,60,12">Boxe 3 min / 1 min × 12</button>
+    </div>
+
+    <div class="card">
+      <div class="field" data-key="prep">
+        <div class="meta"><label for="f-prep">Préparation</label><small class="hint"></small></div>
+        <div class="stepper">
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer la préparation">−</button>
+          <input id="f-prep" type="number" inputmode="numeric" min="0" max="300">
+          <button type="button" class="step" data-step="1" aria-label="Augmenter la préparation">+</button>
+        </div>
+      </div>
+      <div class="field" data-key="work">
+        <div class="meta"><label for="f-work">Travail</label><small class="hint"></small></div>
+        <div class="stepper">
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer le travail">−</button>
+          <input id="f-work" type="number" inputmode="numeric" min="1" max="3599">
+          <button type="button" class="step" data-step="1" aria-label="Augmenter le travail">+</button>
+        </div>
+      </div>
+      <div class="field" data-key="rest">
+        <div class="meta"><label for="f-rest">Repos</label><small class="hint"></small></div>
+        <div class="stepper">
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer le repos">−</button>
+          <input id="f-rest" type="number" inputmode="numeric" min="0" max="3599">
+          <button type="button" class="step" data-step="1" aria-label="Augmenter le repos">+</button>
+        </div>
+      </div>
+      <div class="field" data-key="rounds">
+        <div class="meta"><label for="f-rounds">Séries</label><small class="hint"></small></div>
+        <div class="stepper">
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer le nombre de séries">−</button>
+          <input id="f-rounds" type="number" inputmode="numeric" min="1" max="99">
+          <button type="button" class="step" data-step="1" aria-label="Augmenter le nombre de séries">+</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="toggles">
+      <button type="button" class="toggle" data-toggle="sound" aria-pressed="true"><i></i>Cloche</button>
+      <button type="button" class="toggle" data-toggle="vibrate" aria-pressed="true"><i></i>Vibration</button>
+      <button type="button" class="toggle" data-toggle="ticks" aria-pressed="false"><i></i>Bips 3-2-1</button>
+    </div>
+
+    <div class="summary" id="summary"></div>
+    <button class="go" id="start">Démarrer</button>
+  </section>
+
+  <!-- ========== CHRONO ========== -->
+  <section id="run" data-done="false">
+    <div class="run-top"><span id="roundLabel"></span><span id="totalLeft"></span></div>
+
+    <div class="dial">
+      <svg viewBox="0 0 260 260" aria-hidden="true">
+        <circle class="track" cx="130" cy="130" r="120"/>
+        <circle class="bar" id="bar" cx="130" cy="130" r="120" transform="rotate(-90 130 130)"/>
+      </svg>
+      <div class="dial-text">
+        <div id="phaseLabel" aria-live="polite"></div>
+        <div id="time" role="timer">0</div>
+      </div>
+    </div>
+
+    <div id="nextUp"></div>
+
+    <div class="controls">
+      <button class="round-btn" id="prev" aria-label="Phase précédente">
+        <svg viewBox="0 0 24 24"><path d="M6 5h2v14H6zM20 5v14L9.5 12z"/></svg>
+      </button>
+      <button class="round-btn main" id="pause" aria-label="Pause">
+        <svg viewBox="0 0 24 24" id="pauseIcon"><path d="M6 4h4v16H6zM14 4h4v16h-4z"/></svg>
+      </button>
+      <button class="round-btn" id="next" aria-label="Phase suivante">
+        <svg viewBox="0 0 24 24"><path d="M16 5h2v14h-2zM4 5l10.5 7L4 19z"/></svg>
+      </button>
+    </div>
+    <button class="link" id="stop">Arrêter</button>
+
+    <div class="done-actions">
+      <button class="big" id="again">Recommencer</button>
+      <button class="ghost" id="back">Modifier les réglages</button>
+    </div>
+  </section>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $  = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+
+  /* ---------------- Réglages ---------------- */
+  const STORE = 'tabata-settings-v1';
+  const DEFAULTS = { prep: 10, work: 20, rest: 10, rounds: 8, sound: true, vibrate: true, ticks: false };
+  const LIMITS = { prep: [0, 300, 5], work: [1, 3599, 5], rest: [0, 3599, 5], rounds: [1, 99, 1] };
+  const KEYS = Object.keys(LIMITS);
+
+  let cfg = load();
+  function load() {
+    try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORE) || '{}') }; }
+    catch { return { ...DEFAULTS }; }
+  }
+  function save() { try { localStorage.setItem(STORE, JSON.stringify(cfg)); } catch {} }
+  const clamp = (k, v) => Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], Math.round(v)));
+
+  function fmtDur(s) {
+    const m = Math.floor(s / 60), r = s % 60;
+    if (m === 0) return `${r} s`;
+    return r ? `${m} min ${r} s` : `${m} min`;
+  }
+  const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const totalSeconds = () =>
+    cfg.prep + cfg.rounds * cfg.work + Math.max(0, cfg.rounds - 1) * cfg.rest;
+
+  function renderHints() {
+    KEYS.forEach(k => {
+      const hint = $(`.field[data-key=${k}] .hint`);
+      if (k === 'rounds') hint.textContent = cfg.rounds > 1 ? 'séries' : 'série';
+      else hint.textContent = cfg[k] >= 60 ? `secondes · ${fmtDur(cfg[k])}` : 'secondes';
+    });
+    $('#summary').innerHTML = `Durée totale : <b>${fmtDur(totalSeconds())}</b>`;
+  }
+  function renderFields() {
+    KEYS.forEach(k => { $(`#f-${k}`).value = cfg[k]; });
+    $$('[data-toggle]').forEach(b => b.setAttribute('aria-pressed', String(!!cfg[b.dataset.toggle])));
+    renderHints();
+  }
+
+  $$('.field').forEach(row => {
+    const k = row.dataset.key, input = $('input', row);
+    $$('.step', row).forEach(btn => btn.addEventListener('click', () => {
+      cfg[k] = clamp(k, cfg[k] + (+btn.dataset.step) * LIMITS[k][2]);
+      input.value = cfg[k]; save(); renderHints();
+    }));
+    input.addEventListener('input', () => {
+      const v = parseInt(input.value, 10);
+      if (Number.isNaN(v)) return;
+      cfg[k] = clamp(k, v); save(); renderHints();
+    });
+    input.addEventListener('change', () => {
+      const v = parseInt(input.value, 10);
+      cfg[k] = clamp(k, Number.isNaN(v) ? DEFAULTS[k] : v);
+      input.value = cfg[k]; save(); renderHints();
+    });
+    input.addEventListener('focus', () => input.select());
+  });
+  $$('[data-toggle]').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.toggle; cfg[k] = !cfg[k];
+    b.setAttribute('aria-pressed', String(cfg[k])); save();
+    if (k === 'sound' && cfg.sound) bell(2); // petit aperçu + déverrouillage audio
+  }));
+  $$('[data-preset]').forEach(b => b.addEventListener('click', () => {
+    const [prep, work, rest, rounds] = b.dataset.preset.split(',').map(Number);
+    Object.assign(cfg, { prep, work, rest, rounds }); save(); renderFields();
+  }));
+
+  /* ---------------- Cloche de boxe (synthétisée) ---------------- */
+  let ctx = null, master = null;
+  function audio() {
+    if (!ctx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      ctx = new AC();
+      const comp = ctx.createDynamicsCompressor();
+      master = ctx.createGain(); master.gain.value = 0.55;
+      master.connect(comp); comp.connect(ctx.destination);
+    }
+    if (ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+
+  // [rapport de fréquence, amplitude, durée d'extinction en s]
+  const PARTIALS = [
+    [0.5, 0.30, 1.6], [1, 1.00, 1.5], [2.01, 0.50, 1.1],
+    [2.76, 0.45, 0.9], [4.2, 0.25, 0.55], [5.95, 0.15, 0.35]
+  ];
+  function strike(t, f0 = 1100, vol = 1) {
+    PARTIALS.forEach(([ratio, amp, dec]) => {
+      [1, 1.004].forEach((detune, i) => {           // léger battement = timbre métallique
+        if (i === 1 && ratio !== 1) return;
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.type = 'sine'; o.frequency.value = f0 * ratio * detune;
+        const a = amp * vol * (i ? 0.5 : 1) * 0.55;
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(a, t + 0.003);
+        g.gain.exponentialRampToValueAtTime(0.0001, t + dec);
+        o.connect(g); g.connect(master);
+        o.start(t); o.stop(t + dec + 0.05);
+      });
+    });
+    // claquement du marteau sur le métal
+    const n = Math.floor(ctx.sampleRate * 0.03), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = ctx.createBufferSource(), hp = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = buf; hp.type = 'highpass'; hp.frequency.value = 3000; g.gain.value = 0.35 * vol;
+    src.connect(hp); hp.connect(g); g.connect(master); src.start(t);
+  }
+  function bell(count = 2) {
+    if (!cfg.sound) return;
+    const c = audio(); if (!c) return;
+    const t = c.currentTime + 0.02;
+    for (let i = 0; i < count; i++) strike(t + i * 0.23);   // "ding-ding"
+  }
+  function tick() {
+    if (!cfg.sound) return;
+    const c = audio(); if (!c) return;
+    const t = c.currentTime, o = c.createOscillator(), g = c.createGain();
+    o.type = 'sine'; o.frequency.value = 880;
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.4, t + 0.005);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.15);
+  }
+  const buzz = p => { if (cfg.vibrate && navigator.vibrate) navigator.vibrate(p); };
+
+  /* ---------------- Écran toujours allumé ---------------- */
+  let wake = null;
+  async function lock() {
+    try {
+      if ('wakeLock' in navigator && !wake) {
+        wake = await navigator.wakeLock.request('screen');
+        wake.addEventListener('release', () => { wake = null; });
+      }
+    } catch {}
+  }
+  function unlock() { try { wake && wake.release(); } catch {} wake = null; }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && running) lock();
+  });
+
+  /* ---------------- Machine à états du chrono ---------------- */
+  const app = $('#app'), root = document.documentElement, runEl = $('#run');
+  const LABEL = { prep: 'PRÉPARATION', work: 'TRAVAIL', rest: 'REPOS' };
+  const THEME = { idle: '#0f1115', prep: '#b45309', work: '#c81e1e', rest: '#15803d', done: '#1e40af' };
+  const CIRC = 2 * Math.PI * 120;
+
+  let phases = [], idx = 0, endAt = 0, remMs = 0;
+  let running = false, paused = false, timer = null, lastSec = null;
+
+  function build() {
+    const p = [];
+    if (cfg.prep > 0) p.push({ t: 'prep', d: cfg.prep, round: 0 });
+    for (let i = 1; i <= cfg.rounds; i++) {
+      p.push({ t: 'work', d: cfg.work, round: i });
+      if (cfg.rest > 0 && i < cfg.rounds) p.push({ t: 'rest', d: cfg.rest, round: i });
+    }
+    return p;
+  }
+  function setPhaseAttr(name) {
+    root.dataset.phase = name;
+    $('#themeColor').setAttribute('content', THEME[name]);
+  }
+  function setPauseIcon() {
+    $('#pauseIcon').innerHTML = paused
+      ? '<path d="M7 4l13 8-13 8z"/>'
+      : '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>';
+    $('#pause').setAttribute('aria-label', paused ? 'Reprendre' : 'Pause');
+  }
+
+  function onPhase(playSound = true) {
+    const ph = phases[idx];
+    setPhaseAttr(ph.t);
+    lastSec = null;
+    $('#phaseLabel').textContent = LABEL[ph.t];
+    $('#roundLabel').textContent = ph.round ? `Série ${ph.round} / ${cfg.rounds}` : 'Prêt ?';
+    const nx = phases[idx + 1];
+    $('#nextUp').textContent = nx ? `Ensuite : ${LABEL[nx.t].toLowerCase().replace(/^./, c => c.toUpperCase())} · ${fmtDur(nx.d)}` : 'Dernière série !';
+    if (playSound) { bell(2); buzz([180, 70, 180]); }
+  }
+
+  function render(ms) {
+    const ph = phases[idx];
+    const secs = Math.max(0, Math.ceil(ms / 1000));
+    const t = $('#time');
+    t.textContent = secs >= 60 ? mmss(secs) : String(secs);
+    t.classList.toggle('small', secs >= 600);
+    $('#bar').style.strokeDashoffset = String(CIRC * Math.min(1, Math.max(0, 1 - ms / (ph.d * 1000))));
+    let left = secs;
+    for (let i = idx + 1; i < phases.length; i++) left += phases[i].d;
+    $('#totalLeft').textContent = `Reste ${mmss(left)}`;
+    if (cfg.ticks && secs !== lastSec && secs >= 1 && secs <= 3 && !paused) tick();
+    lastSec = secs;
+  }
+
+  function step() {
+    if (!running || paused) return;
+    const now = Date.now();
+    let changed = false;
+    while (now >= endAt) {
+      idx++;
+      if (idx >= phases.length) { finish(); return; }
+      endAt += phases[idx].d * 1000;      // pas de dérive cumulée
+      changed = true;
+    }
+    if (changed) onPhase();
+    render(endAt - now);
+  }
+
+  function start() {
+    audio();                               // déverrouille le son (geste utilisateur)
+    phases = build(); idx = 0; running = true; paused = false;
+    runEl.dataset.done = 'false'; setPauseIcon();
+    app.dataset.screen = 'run';
+    endAt = Date.now() + phases[0].d * 1000;
+    onPhase(phases[0].t === 'work');       // cloche au départ si pas de préparation
+    render(phases[0].d * 1000);
+    clearInterval(timer); timer = setInterval(step, 50);
+    lock();
+  }
+
+  function finish() {
+    running = false; clearInterval(timer); unlock();
+    setPhaseAttr('done');
+    runEl.dataset.done = 'true';
+    $('#phaseLabel').textContent = 'TERMINÉ';
+    $('#time').textContent = 'Bravo !'; $('#time').classList.add('small');
+    $('#roundLabel').textContent = `${cfg.rounds} séries`;
+    $('#totalLeft').textContent = fmtDur(totalSeconds());
+    $('#bar').style.strokeDashoffset = '0';
+    bell(3); buzz([300, 100, 300, 100, 300]);
+  }
+
+  function stop() {
+    running = false; paused = false; clearInterval(timer); unlock();
+    setPhaseAttr('idle'); app.dataset.screen = 'setup';
+    $('#time').classList.remove('small');
+  }
+
+  function togglePause() {
+    if (!running) return;
+    audio();
+    if (!paused) { remMs = endAt - Date.now(); paused = true; }
+    else { endAt = Date.now() + remMs; paused = false; lock(); }
+    setPauseIcon();
+  }
+
+  function skip(dir) {
+    if (!running) return;
+    audio();
+    const target = idx + dir;
+    if (target >= phases.length) { finish(); return; }
+    idx = Math.max(0, target);
+    endAt = Date.now() + phases[idx].d * 1000;
+    remMs = phases[idx].d * 1000;
+    onPhase(idx > 0 || phases[0].t === 'work');
+    render(remMs);
+  }
+
+  $('#start').addEventListener('click', start);
+  $('#pause').addEventListener('click', togglePause);
+  $('#prev').addEventListener('click', () => skip(-1));
+  $('#next').addEventListener('click', () => skip(1));
+  $('#stop').addEventListener('click', () => { if (confirm('Arrêter la séance ?')) stop(); });
+  $('#again').addEventListener('click', start);
+  $('#back').addEventListener('click', stop);
+  document.addEventListener('keydown', e => {
+    if (e.code === 'Space' && app.dataset.screen === 'run' && runEl.dataset.done !== 'true') {
+      e.preventDefault(); togglePause();
+    }
+  });
+
+  /* ---------------- Installation PWA ---------------- */
+  let deferred = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault(); deferred = e; $('#install').hidden = false;
+  });
+  $('#install').addEventListener('click', async () => {
+    if (!deferred) return;
+    deferred.prompt(); await deferred.userChoice.catch(() => {});
+    deferred = null; $('#install').hidden = true;
+  });
+  window.addEventListener('appinstalled', () => { $('#install').hidden = true; });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
+
+  setPhaseAttr('idle');
+  renderFields();
+})();
+</script>
+</body>
+</html>
