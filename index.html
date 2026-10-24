@@ -31,6 +31,7 @@
   html[data-phase=work] body{background:#c81e1e}
   html[data-phase=rest] body{background:#15803d}
   html[data-phase=done] body{background:#1e40af}
+  html[data-phase=brest] body{background:#6d28d9}
 
   #app{
     min-height:100dvh;display:flex;flex-direction:column;
@@ -70,6 +71,14 @@
   }
   .stepper input::-webkit-outer-spin-button,.stepper input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 
+  .card + .card{margin-top:10px}
+  .field{padding:12px 16px}
+  .field.off{opacity:.45}
+  .field.time .stepper{gap:5px}
+  .field.time .step{width:38px;height:44px}
+  .tin{display:flex;align-items:center;gap:3px}
+  .tin input{width:48px}
+  .tin b{color:var(--muted);font-weight:700}
   .toggles{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 0}
   .toggle{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:9px 14px;font-size:.88rem;color:var(--muted)}
   .toggle i{width:10px;height:10px;border-radius:50%;background:#3a3f4b}
@@ -123,6 +132,7 @@
   html[data-phase=prep] #lockscreen{--c:#d97706}
   html[data-phase=work] #lockscreen{--c:#ef4444}
   html[data-phase=rest] #lockscreen{--c:#22c55e}
+  html[data-phase=brest] #lockscreen{--c:#a78bfa}
   #lockscreen .ls-top{
     position:absolute;top:calc(20px + var(--safe-t));left:20px;right:20px;
     display:flex;justify-content:space-between;font-weight:650;opacity:.75;font-variant-numeric:tabular-nums;
@@ -155,51 +165,83 @@
     </div>
 
     <div class="presets" aria-label="Préréglages">
-      <button class="chip" data-preset="10,20,10,8">Tabata 20/10 × 8</button>
-      <button class="chip" data-preset="10,30,30,10">30/30 × 10</button>
-      <button class="chip" data-preset="10,40,20,8">40/20 × 8</button>
-      <button class="chip" data-preset="10,180,60,12">Boxe 3 min / 1 min × 12</button>
+      <button class="chip" data-preset="10,20,10,8,1,120">Tabata 20/10 × 8</button>
+      <button class="chip" data-preset="10,15,15,3,3,120">15/15 · 3 séries × 3 blocs</button>
+      <button class="chip" data-preset="10,30,30,10,1,120">30/30 × 10</button>
+      <button class="chip" data-preset="10,40,20,8,1,120">40/20 × 8</button>
+      <button class="chip" data-preset="10,180,60,12,1,120">Boxe 3 min / 1 min × 12</button>
     </div>
 
     <div class="card">
-      <div class="field" data-key="prep">
-        <div class="meta"><label for="f-prep">Préparation</label><small class="hint"></small></div>
+      <div class="field time" data-key="prep">
+        <div class="meta"><label for="f-prep-m">Préparation</label><small class="hint">min : sec</small></div>
         <div class="stepper">
-          <button type="button" class="step" data-step="-1" aria-label="Diminuer la préparation">−</button>
-          <input id="f-prep" type="number" inputmode="numeric" min="0" max="300">
-          <button type="button" class="step" data-step="1" aria-label="Augmenter la préparation">+</button>
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer : préparation">−</button>
+          <div class="tin">
+            <input id="f-prep-m" class="m" type="number" inputmode="numeric" min="0" max="59" aria-label="Préparation, minutes">
+            <b>:</b>
+            <input id="f-prep-s" class="s" type="number" inputmode="numeric" min="0" max="59" aria-label="Préparation, secondes">
+          </div>
+          <button type="button" class="step" data-step="1" aria-label="Augmenter : préparation">+</button>
         </div>
       </div>
-      <div class="field" data-key="work">
-        <div class="meta"><label for="f-work">Travail</label><small class="hint"></small></div>
+      <div class="field time" data-key="work">
+        <div class="meta"><label for="f-work-m">Travail</label><small class="hint">min : sec</small></div>
         <div class="stepper">
-          <button type="button" class="step" data-step="-1" aria-label="Diminuer le travail">−</button>
-          <input id="f-work" type="number" inputmode="numeric" min="1" max="3599">
-          <button type="button" class="step" data-step="1" aria-label="Augmenter le travail">+</button>
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer : travail">−</button>
+          <div class="tin">
+            <input id="f-work-m" class="m" type="number" inputmode="numeric" min="0" max="59" aria-label="Travail, minutes">
+            <b>:</b>
+            <input id="f-work-s" class="s" type="number" inputmode="numeric" min="0" max="59" aria-label="Travail, secondes">
+          </div>
+          <button type="button" class="step" data-step="1" aria-label="Augmenter : travail">+</button>
         </div>
       </div>
-      <div class="field" data-key="rest">
-        <div class="meta"><label for="f-rest">Repos</label><small class="hint"></small></div>
+      <div class="field time" data-key="rest">
+        <div class="meta"><label for="f-rest-m">Repos</label><small class="hint">min : sec</small></div>
         <div class="stepper">
-          <button type="button" class="step" data-step="-1" aria-label="Diminuer le repos">−</button>
-          <input id="f-rest" type="number" inputmode="numeric" min="0" max="3599">
-          <button type="button" class="step" data-step="1" aria-label="Augmenter le repos">+</button>
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer : repos">−</button>
+          <div class="tin">
+            <input id="f-rest-m" class="m" type="number" inputmode="numeric" min="0" max="59" aria-label="Repos, minutes">
+            <b>:</b>
+            <input id="f-rest-s" class="s" type="number" inputmode="numeric" min="0" max="59" aria-label="Repos, secondes">
+          </div>
+          <button type="button" class="step" data-step="1" aria-label="Augmenter : repos">+</button>
         </div>
       </div>
       <div class="field" data-key="rounds">
-        <div class="meta"><label for="f-rounds">Séries</label><small class="hint"></small></div>
+        <div class="meta"><label for="f-rounds">Séries</label><small class="hint" id="hint-rounds"></small></div>
         <div class="stepper">
-          <button type="button" class="step" data-step="-1" aria-label="Diminuer le nombre de séries">−</button>
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer : séries">−</button>
           <input id="f-rounds" type="number" inputmode="numeric" min="1" max="99">
-          <button type="button" class="step" data-step="1" aria-label="Augmenter le nombre de séries">+</button>
+          <button type="button" class="step" data-step="1" aria-label="Augmenter : séries">+</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="field" data-key="blocks">
+        <div class="meta"><label for="f-blocks">Blocs</label><small class="hint">fois la série</small></div>
+        <div class="stepper">
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer : blocs">−</button>
+          <input id="f-blocks" type="number" inputmode="numeric" min="1" max="99">
+          <button type="button" class="step" data-step="1" aria-label="Augmenter : blocs">+</button>
+        </div>
+      </div>
+      <div class="field time" data-key="brest">
+        <div class="meta"><label for="f-brest-m">Pause entre blocs</label><small class="hint">min : sec</small></div>
+        <div class="stepper">
+          <button type="button" class="step" data-step="-1" aria-label="Diminuer : pause entre blocs">−</button>
+          <div class="tin">
+            <input id="f-brest-m" class="m" type="number" inputmode="numeric" min="0" max="59" aria-label="Pause entre blocs, minutes">
+            <b>:</b>
+            <input id="f-brest-s" class="s" type="number" inputmode="numeric" min="0" max="59" aria-label="Pause entre blocs, secondes">
+          </div>
+          <button type="button" class="step" data-step="1" aria-label="Augmenter : pause entre blocs">+</button>
         </div>
       </div>
     </div>
 
     <div class="toggles">
-      <button type="button" class="toggle" data-toggle="sound" aria-pressed="true"><i></i>Cloche</button>
-      <button type="button" class="toggle" data-toggle="vibrate" aria-pressed="true"><i></i>Vibration</button>
-      <button type="button" class="toggle" data-toggle="ticks" aria-pressed="false"><i></i>Bips 3-2-1</button>
       <button type="button" class="toggle" data-toggle="music" aria-pressed="true"><i></i>Compatible musique</button>
     </div>
     <p class="note" id="musicNote"></p>
@@ -264,34 +306,37 @@
 
   /* ---------------- Réglages ---------------- */
   const STORE = 'tabata-settings-v1';
-  const DEFAULTS = { prep: 10, work: 20, rest: 10, rounds: 8, sound: true, vibrate: true, ticks: false, music: true };
-  const LIMITS = { prep: [0, 300, 1], work: [1, 3599, 1], rest: [0, 3599, 1], rounds: [1, 99, 1] };  // [min, max, pas]
+  const DEFAULTS = { prep: 10, work: 20, rest: 10, rounds: 8, blocks: 1, brest: 120, music: true };
+  const LIMITS = { prep: [0, 3599], work: [1, 3599], rest: [0, 3599], brest: [0, 3599], rounds: [1, 99], blocks: [1, 99] };
+  const TIME_KEYS = ['prep', 'work', 'rest', 'brest'];
   const KEYS = Object.keys(LIMITS);
 
-  let cfg = load();
   function load() {
     try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(STORE) || '{}') }; }
     catch { return { ...DEFAULTS }; }
   }
+  // Cloche, vibration et bips 3-2-1 : toujours actifs.
+  let cfg = { ...load(), sound: true, vibrate: true, ticks: true };
   function save() { try { localStorage.setItem(STORE, JSON.stringify(cfg)); } catch {} }
   const clamp = (k, v) => Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], Math.round(v)));
 
   function fmtDur(s) {
-    const m = Math.floor(s / 60), r = s % 60;
-    if (m === 0) return `${r} s`;
-    return r ? `${m} min ${r} s` : `${m} min`;
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+    const parts = [];
+    if (h) parts.push(`${h} h`);
+    if (m) parts.push(`${m} min`);
+    if (r || !parts.length) parts.push(`${r} s`);
+    return parts.join(' ');
   }
   const mmss = s => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-  const totalSeconds = () =>
-    cfg.prep + cfg.rounds * cfg.work + Math.max(0, cfg.rounds - 1) * cfg.rest;
+  const blockSeconds = () => cfg.rounds * cfg.work + Math.max(0, cfg.rounds - 1) * cfg.rest;
+  const totalSeconds = () => cfg.prep + cfg.blocks * blockSeconds() + Math.max(0, cfg.blocks - 1) * cfg.brest;
 
   function renderHints() {
-    KEYS.forEach(k => {
-      const hint = $(`.field[data-key=${k}] .hint`);
-      if (k === 'rounds') hint.textContent = cfg.rounds > 1 ? 'séries' : 'série';
-      else hint.textContent = cfg[k] >= 60 ? `secondes · ${fmtDur(cfg[k])}` : 'secondes';
-    });
-    $('#summary').innerHTML = `Durée totale : <b>${fmtDur(totalSeconds())}</b>`;
+    $('#hint-rounds').textContent = cfg.blocks > 1 ? 'par bloc' : '';
+    $('.field[data-key=brest]').classList.toggle('off', cfg.blocks < 2);
+    $('#summary').innerHTML = `Durée totale : <b>${fmtDur(totalSeconds())}</b>` +
+      (cfg.blocks > 1 ? ` · ${cfg.blocks} blocs` : '');
   }
   function renderNote() {
     $('#musicNote').textContent = cfg.music
@@ -299,25 +344,33 @@
       : "La cloche sonne même en mode silencieux, mais elle coupe ta musique.";
   }
   function renderFields() {
-    KEYS.forEach(k => { $(`#f-${k}`).value = cfg[k]; });
+    $$('.field').forEach(row => row._show && row._show());
     $$('[data-toggle]').forEach(b => b.setAttribute('aria-pressed', String(!!cfg[b.dataset.toggle])));
     renderHints(); renderNote();
   }
 
   $$('.field').forEach(row => {
-    const k = row.dataset.key, input = $('input', row);
+    const k = row.dataset.key, isTime = TIME_KEYS.includes(k);
+    const mI = $('.m', row), sI = $('.s', row), cI = isTime ? null : $('input', row);
+    const show = row._show = () => {
+      if (isTime) { mI.value = Math.floor(cfg[k] / 60); sI.value = String(cfg[k] % 60).padStart(2, '0'); }
+      else cI.value = cfg[k];
+    };
+    const readTime = () => {
+      const m = parseInt(mI.value, 10), s = parseInt(sI.value, 10);
+      return (Number.isNaN(m) ? 0 : m) * 60 + (Number.isNaN(s) ? 0 : s);
+    };
+    const commit = v => { cfg[k] = clamp(k, v); save(); renderHints(); };
+
     $$('.step', row).forEach(btn => {
       const dir = +btn.dataset.step;
       let t1 = null, t2 = null, n = 0;
-      const apply = (mult = 1) => {
-        cfg[k] = clamp(k, cfg[k] + dir * LIMITS[k][2] * mult);
-        input.value = cfg[k]; save(); renderHints();
-      };
+      const apply = (mult = 1) => { commit(cfg[k] + dir * mult); show(); };
       const halt = () => { clearTimeout(t1); clearInterval(t2); t1 = t2 = null; };
       btn.addEventListener('pointerdown', e => {
         e.preventDefault(); halt(); n = 0; apply();
         t1 = setTimeout(() => {           // appui long : répétition, de plus en plus rapide
-          t2 = setInterval(() => { n++; apply(n > 20 && k !== 'rounds' ? 5 : 1); }, 85);
+          t2 = setInterval(() => { n++; apply(n > 20 && isTime ? 5 : 1); }, 85);
         }, 450);
       });
       ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => btn.addEventListener(ev, halt));
@@ -326,26 +379,28 @@
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); apply(); }
       });
     });
-    input.addEventListener('input', () => {
-      const v = parseInt(input.value, 10);
-      if (Number.isNaN(v)) return;
-      cfg[k] = clamp(k, v); save(); renderHints();
+
+    (isTime ? [mI, sI] : [cI]).forEach(inp => {
+      inp.addEventListener('input', () => {
+        const v = isTime ? readTime() : parseInt(cI.value, 10);
+        if (!Number.isNaN(v)) commit(v);
+      });
+      inp.addEventListener('change', () => {
+        if (isTime) commit(readTime());
+        else { const v = parseInt(cI.value, 10); commit(Number.isNaN(v) ? DEFAULTS[k] : v); }
+        show();                            // normalise : 75 s -> 1:15
+      });
+      inp.addEventListener('focus', () => inp.select());
     });
-    input.addEventListener('change', () => {
-      const v = parseInt(input.value, 10);
-      cfg[k] = clamp(k, Number.isNaN(v) ? DEFAULTS[k] : v);
-      input.value = cfg[k]; save(); renderHints();
-    });
-    input.addEventListener('focus', () => input.select());
   });
   $$('[data-toggle]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.toggle; cfg[k] = !cfg[k];
     b.setAttribute('aria-pressed', String(cfg[k])); save(); renderNote();
-    if ((k === 'sound' && cfg.sound) || k === 'music') { primeAudio(); bell(2); } // aperçu du son
+    if (k === 'music') { primeAudio(); bell(2); }   // aperçu du son
   }));
   $$('[data-preset]').forEach(b => b.addEventListener('click', () => {
-    const [prep, work, rest, rounds] = b.dataset.preset.split(',').map(Number);
-    Object.assign(cfg, { prep, work, rest, rounds }); save(); renderFields();
+    const [prep, work, rest, rounds, blocks, brest] = b.dataset.preset.split(',').map(Number);
+    Object.assign(cfg, { prep, work, rest, rounds, blocks, brest }); save(); renderFields();
   }));
 
   /* ---------------- Cloche de boxe : ton fichier bell.wav ----------------
@@ -452,8 +507,8 @@
 
   /* ---------------- Machine à états du chrono ---------------- */
   const app = $('#app'), root = document.documentElement, runEl = $('#run');
-  const LABEL = { prep: 'PRÉPARATION', work: 'TRAVAIL', rest: 'REPOS' };
-  const THEME = { idle: '#0f1115', prep: '#b45309', work: '#c81e1e', rest: '#15803d', done: '#1e40af' };
+  const LABEL = { prep: 'PRÉPARATION', work: 'TRAVAIL', rest: 'REPOS', brest: 'PAUSE BLOC' };
+  const THEME = { idle: '#0f1115', prep: '#b45309', work: '#c81e1e', rest: '#15803d', brest: '#6d28d9', done: '#1e40af' };
   const CIRC = 2 * Math.PI * 120;
 
   let phases = [], idx = 0, endAt = 0, remMs = 0;
@@ -461,12 +516,20 @@
 
   function build() {
     const p = [];
-    if (cfg.prep > 0) p.push({ t: 'prep', d: cfg.prep, round: 0 });
-    for (let i = 1; i <= cfg.rounds; i++) {
-      p.push({ t: 'work', d: cfg.work, round: i });
-      if (cfg.rest > 0 && i < cfg.rounds) p.push({ t: 'rest', d: cfg.rest, round: i });
+    if (cfg.prep > 0) p.push({ t: 'prep', d: cfg.prep, round: 0, block: 0 });
+    for (let bl = 1; bl <= cfg.blocks; bl++) {
+      for (let i = 1; i <= cfg.rounds; i++) {
+        p.push({ t: 'work', d: cfg.work, round: i, block: bl });
+        if (cfg.rest > 0 && i < cfg.rounds) p.push({ t: 'rest', d: cfg.rest, round: i, block: bl });
+      }
+      if (cfg.brest > 0 && bl < cfg.blocks) p.push({ t: 'brest', d: cfg.brest, round: cfg.rounds, block: bl });
     }
     return p;
+  }
+  function roundText(ph) {
+    if (ph.t === 'prep') return 'Prêt ?';
+    if (ph.t === 'brest') return `Bloc ${ph.block} / ${cfg.blocks} terminé`;
+    return `Série ${ph.round} / ${cfg.rounds}` + (cfg.blocks > 1 ? ` · Bloc ${ph.block} / ${cfg.blocks}` : '');
   }
   function setPhaseAttr(name) {
     root.dataset.phase = name;
@@ -484,7 +547,7 @@
     setPhaseAttr(ph.t);
     lastSec = null;
     $('#phaseLabel').textContent = LABEL[ph.t];
-    $('#roundLabel').textContent = ph.round ? `Série ${ph.round} / ${cfg.rounds}` : 'Prêt ?';
+    $('#roundLabel').textContent = roundText(ph);
     const nx = phases[idx + 1];
     $('#nextUp').textContent = nx ? `Ensuite : ${LABEL[nx.t].toLowerCase().replace(/^./, c => c.toUpperCase())} · ${fmtDur(nx.d)}` : 'Dernière série !';
     if (playSound) { bell(2); buzz([180, 70, 180]); }
@@ -537,7 +600,7 @@
     runEl.dataset.done = 'true';
     $('#phaseLabel').textContent = 'TERMINÉ';
     $('#time').textContent = 'Bravo !'; $('#time').classList.add('small');
-    $('#roundLabel').textContent = `${cfg.rounds} séries`;
+    $('#roundLabel').textContent = cfg.blocks > 1 ? `${cfg.blocks} blocs × ${cfg.rounds} séries` : `${cfg.rounds} séries`;
     $('#totalLeft').textContent = fmtDur(totalSeconds());
     $('#bar').style.strokeDashoffset = '0';
     bell(3); buzz([300, 100, 300, 100, 300]);

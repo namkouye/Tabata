@@ -1,6 +1,6 @@
 // Service worker : met toute l'app en cache pour un fonctionnement 100 % hors-ligne.
-// Passe CACHE à 'tabata-v4', 'v5'… à chaque mise à jour pour forcer le renouvellement.
-const CACHE = 'tabata-v3';
+// Passe CACHE à 'tabata-v5', 'v6'… à chaque mise à jour pour forcer le renouvellement.
+const CACHE = 'tabata-v4';
 const ASSETS = [
   './',
   './index.html',
