@@ -76,6 +76,7 @@
   .toggle[aria-pressed=true]{color:var(--fg);border-color:#3b4150}
   .toggle[aria-pressed=true] i{background:#22c55e;box-shadow:0 0 0 3px rgba(34,197,94,.2)}
 
+  .note{margin:10px 2px 0;color:var(--muted);font-size:.8rem;line-height:1.4}
   .summary{margin-top:auto;padding-top:20px;text-align:center;color:var(--muted);font-size:.95rem}
   .summary b{color:var(--fg);font-variant-numeric:tabular-nums}
   .go{
@@ -199,7 +200,9 @@
       <button type="button" class="toggle" data-toggle="sound" aria-pressed="true"><i></i>Cloche</button>
       <button type="button" class="toggle" data-toggle="vibrate" aria-pressed="true"><i></i>Vibration</button>
       <button type="button" class="toggle" data-toggle="ticks" aria-pressed="false"><i></i>Bips 3-2-1</button>
+      <button type="button" class="toggle" data-toggle="music" aria-pressed="true"><i></i>Compatible musique</button>
     </div>
+    <p class="note" id="musicNote"></p>
 
     <div class="summary" id="summary"></div>
     <button class="go" id="start">Démarrer</button>
@@ -261,7 +264,7 @@
 
   /* ---------------- Réglages ---------------- */
   const STORE = 'tabata-settings-v1';
-  const DEFAULTS = { prep: 10, work: 20, rest: 10, rounds: 8, sound: true, vibrate: true, ticks: false };
+  const DEFAULTS = { prep: 10, work: 20, rest: 10, rounds: 8, sound: true, vibrate: true, ticks: false, music: true };
   const LIMITS = { prep: [0, 300, 1], work: [1, 3599, 1], rest: [0, 3599, 1], rounds: [1, 99, 1] };  // [min, max, pas]
   const KEYS = Object.keys(LIMITS);
 
@@ -290,10 +293,15 @@
     });
     $('#summary').innerHTML = `Durée totale : <b>${fmtDur(totalSeconds())}</b>`;
   }
+  function renderNote() {
+    $('#musicNote').textContent = cfg.music
+      ? "La cloche se mélange à ta musique (Spotify…) sans la couper. Elle ne sonne pas si l'iPhone est en mode silencieux."
+      : "La cloche sonne même en mode silencieux, mais elle coupe ta musique.";
+  }
   function renderFields() {
     KEYS.forEach(k => { $(`#f-${k}`).value = cfg[k]; });
     $$('[data-toggle]').forEach(b => b.setAttribute('aria-pressed', String(!!cfg[b.dataset.toggle])));
-    renderHints();
+    renderHints(); renderNote();
   }
 
   $$('.field').forEach(row => {
@@ -332,23 +340,19 @@
   });
   $$('[data-toggle]').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.toggle; cfg[k] = !cfg[k];
-    b.setAttribute('aria-pressed', String(cfg[k])); save();
-    if (k === 'sound' && cfg.sound) { primeAudio(); bell(2); } // aperçu du son
+    b.setAttribute('aria-pressed', String(cfg[k])); save(); renderNote();
+    if ((k === 'sound' && cfg.sound) || k === 'music') { primeAudio(); bell(2); } // aperçu du son
   }));
   $$('[data-preset]').forEach(b => b.addEventListener('click', () => {
     const [prep, work, rest, rounds] = b.dataset.preset.split(',').map(Number);
     Object.assign(cfg, { prep, work, rest, rounds }); save(); renderFields();
   }));
 
-  /* ---------------- Cloche de boxe : WAV synthétisé joué via <audio> ----------------
-     Sur iPhone, Web Audio est coupé par l'interrupteur silencieux et reste souvent muet ;
-     un élément <audio> lancé après un toucher sonne de façon fiable. */
+  /* ---------------- Cloche de boxe : ton fichier bell.wav ----------------
+     Deux modes, car iOS lie le mélange avec la musique et le mode silencieux :
+     - « Compatible musique » (défaut) : Web Audio. Se mélange à Spotify, mais muet si l'iPhone est en silencieux.
+     - sinon : élément <audio>. Sonne même en silencieux, mais coupe la musique. */
   const SR = 22050;
-  // [rapport de fréquence, amplitude, durée d'extinction en s]
-  const PARTIALS = [
-    [0.5, 0.30, 1.6], [1, 1.00, 1.5], [2.01, 0.50, 1.1],
-    [2.76, 0.45, 0.9], [4.2, 0.25, 0.55], [5.95, 0.15, 0.35]
-  ];
   function toWavUrl(f) {
     const n = f.length, buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
     const wr = (o, str) => { for (let i = 0; i < str.length; i++) v.setUint8(o + i, str.charCodeAt(i)); };
@@ -359,68 +363,75 @@
     for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.max(-1, Math.min(1, f[i])) * 32767, true);
     return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
   }
-  function synthBell(strikes, gap) {
-    const n = Math.floor(SR * ((strikes - 1) * gap + 1.9)), out = new Float32Array(n);
-    for (let s = 0; s < strikes; s++) {
-      const i0 = Math.floor(s * gap * SR);
-      PARTIALS.forEach(([ratio, amp, dec]) => {
-        [1, 1.004].forEach((det, di) => {      // léger battement = timbre métallique
-          if (di && ratio !== 1) return;
-          const w = 2 * Math.PI * 1100 * ratio * det / SR;
-          const a = amp * 0.55 * (di ? 0.5 : 1);
-          const k = Math.log(a / 0.0001) / dec, len = Math.floor((dec + 0.05) * SR);
-          for (let j = 0; j < len && i0 + j < n; j++) {
-            const t = j / SR;
-            out[i0 + j] += Math.sin(w * j) * (t < 0.003 ? a * t / 0.003 : a * Math.exp(-k * (t - 0.003)));
-          }
-        });
-      });
-      const cl = Math.floor(0.03 * SR); let prev = 0;   // claquement du marteau
-      for (let j = 0; j < cl && i0 + j < n; j++) {
-        const x = Math.random() * 2 - 1;
-        out[i0 + j] += (x - prev) * 0.5 * 0.35 * (1 - j / cl); prev = x;
-      }
-    }
-    let peak = 0; for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(out[i]));
-    const g = peak ? 0.9 / peak : 1; for (let i = 0; i < n; i++) out[i] *= g;
-    return toWavUrl(out);
-  }
-  function synthTick() {
+  function tickData() {                       // petit bip 880 Hz pour le 3-2-1
     const n = Math.floor(SR * 0.15), o = new Float32Array(n);
     for (let j = 0; j < n; j++) {
       const t = j / SR;
       o[j] = Math.sin(2 * Math.PI * 880 * t) * (t < 0.005 ? t / 0.005 : Math.exp(-(t - 0.005) * 35)) * 0.8;
     }
-    return toWavUrl(o);
+    return o;
   }
 
-  let urls = null, player = null, keep = null, primed = false;
+  let ac = null, bellBuf = null, tickBuf = null;                    // mode Web Audio
+  let urls = null, player = null, keep = null, primed = false;      // mode <audio>
+
   function initAudio() {
     if (urls) return;
-    urls = {
-      bell2: synthBell(2, 0.23), bell3: synthBell(3, 0.23),
-      tick: synthTick(), silence: toWavUrl(new Float32Array(SR))
-    };
+    const tk = tickData();
+    urls = { tick: toWavUrl(tk), silence: toWavUrl(new Float32Array(SR)) };
     player = new Audio(); player.preload = 'auto'; player.setAttribute('playsinline', '');
     keep = new Audio(urls.silence); keep.loop = true; keep.setAttribute('playsinline', '');
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (AC) {
+      try {
+        ac = new AC();                       // créé « suspendu » : réveillé au premier toucher
+        tickBuf = ac.createBuffer(1, tk.length, SR); tickBuf.copyToChannel(tk, 0);
+      } catch { ac = null; }
+    }
+    fetch('bell.wav').then(r => r.arrayBuffer()).then(data => {
+      urls.bell = URL.createObjectURL(new Blob([data.slice(0)], { type: 'audio/wav' }));
+      if (!ac) return;
+      return new Promise((res, rej) => {
+        const p = ac.decodeAudioData(data, res, rej);
+        if (p && p.then) p.then(res, rej);
+      }).then(buf => { bellBuf = buf; });
+    }).catch(() => {});
+  }
+  function wakeCtx() {
+    if (ac && ac.state !== 'running') { const p = ac.resume(); if (p && p.catch) p.catch(() => {}); }
+    return ac;
   }
   // À appeler dans un geste utilisateur : débloque l'audio sur iOS.
   function primeAudio() {
     initAudio();
+    if (cfg.music && ac) {
+      const c = wakeCtx();
+      try { const sr = c.createBufferSource(); sr.buffer = c.createBuffer(1, 1, SR); sr.connect(c.destination); sr.start(0); } catch {}
+      return;
+    }
     if (primed) return;
-    primed = true;
-    player.src = urls.silence;
+    primed = true; player.src = urls.silence;
     const p = player.play(); if (p) p.catch(() => { primed = false; });
   }
-  function playSound(name) {
+  function playSound(name, delay = 0) {
     if (!cfg.sound) return;
     initAudio();
-    try { player.src = urls[name]; const p = player.play(); if (p) p.catch(() => {}); } catch {}
+    if (cfg.music && ac) {
+      const buf = name === 'bell' ? bellBuf : tickBuf, c = wakeCtx();
+      if (!buf || !c) return;
+      const sr = c.createBufferSource(); sr.buffer = buf; sr.connect(c.destination);
+      sr.start(c.currentTime + delay + 0.01);
+      return;
+    }
+    const go = () => {
+      try { if (!urls[name]) return; player.src = urls[name]; const p = player.play(); if (p) p.catch(() => {}); } catch {}
+    };
+    delay ? setTimeout(go, delay * 1000) : go();
   }
-  // Boucle silencieuse pendant la séance : garde la session audio « média » active.
-  function startKeepAlive() { initAudio(); const p = keep.play(); if (p) p.catch(() => {}); }
+  // Mode <audio> uniquement : boucle silencieuse qui garde la session audio « média » active.
+  function startKeepAlive() { if (cfg.music && ac) return; initAudio(); const p = keep.play(); if (p) p.catch(() => {}); }
   function stopKeepAlive() { if (keep) keep.pause(); }
-  const bell = (count = 2) => playSound(count >= 3 ? 'bell3' : 'bell2');   // "ding-ding" / "ding-ding-ding"
+  const bell = (count = 2) => { playSound('bell'); if (count >= 3) playSound('bell', 1.4); };  // fin : la cloche deux fois
   const tick = () => playSound('tick');
   const buzz = p => { if (cfg.vibrate && navigator.vibrate) navigator.vibrate(p); };
 
