@@ -147,6 +147,14 @@
   #unlock span{position:relative}
   #unlock.holding::before{width:100%;transition:width 1.2s linear}
 
+  .ver{margin-top:14px;text-align:center;color:var(--muted);font-size:.8rem}
+  .vbtn{background:none;color:var(--muted);text-decoration:underline;text-underline-offset:3px;padding:6px 4px;font-size:.8rem}
+  #toast{
+    position:fixed;left:50%;transform:translateX(-50%);top:calc(12px + var(--safe-t));z-index:40;
+    max-width:min(92vw,420px);background:#fff;color:#111;padding:10px 16px;border-radius:999px;
+    font-weight:650;font-size:.9rem;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.35);
+  }
+
   @media (max-height:640px){
     .dial{width:min(70vw,44dvh)}
     .round-btn.main{width:76px;height:76px}.round-btn{width:54px;height:54px}
@@ -248,6 +256,7 @@
 
     <div class="summary" id="summary"></div>
     <button class="go" id="start">Démarrer</button>
+    <div class="ver"><span id="verText"></span> · <button type="button" class="vbtn" id="checkUpd">Vérifier les mises à jour</button></div>
   </section>
 
   <!-- ========== CHRONO ========== -->
@@ -290,6 +299,8 @@
   </section>
 </div>
 
+<div id="toast" role="status" aria-live="polite" hidden></div>
+
 <!-- Écran verrouillé : ignore tous les toucher, déverrouillage par appui long -->
 <div id="lockscreen" hidden>
   <div class="ls-top"><span id="lsRound"></span><span id="lsLeft"></span></div>
@@ -298,6 +309,7 @@
   <button id="unlock"><span>Maintiens pour déverrouiller</span></button>
 </div>
 
+<script src="version.js"></script>
 <script>
 (() => {
   'use strict';
@@ -610,6 +622,7 @@
     running = false; paused = false; clearInterval(timer); unlock(); stopKeepAlive(); unlockScreen();
     setPhaseAttr('idle'); app.dataset.screen = 'setup';
     $('#time').classList.remove('small');
+    setTimeout(tryApply, 0);
   }
 
   function togglePause() {
@@ -678,9 +691,69 @@
   });
   window.addEventListener('appinstalled', () => { $('#install').hidden = true; });
 
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  /* ---------------- Mises à jour automatiques (Service Worker) ---------------- */
+  const VERSION = window.APP_VERSION || '?';
+  let reg = null, waiting = null, applying = false, toastT = null;
+
+  function toast(msg, ms = 4000) {
+    const el = $('#toast'); el.textContent = msg; el.hidden = false;
+    clearTimeout(toastT); if (ms) toastT = setTimeout(() => { el.hidden = true; }, ms);
   }
+  const editing = () => /^(INPUT|TEXTAREA)$/.test((document.activeElement || {}).tagName || '');
+
+  // Applique la version en attente, mais jamais pendant une séance ni pendant une saisie.
+  function tryApply() {
+    if (!waiting || applying) return;
+    if (running || app.dataset.screen !== 'setup' || editing()) return;
+    applying = true;
+    waiting.postMessage({ type: 'SKIP_WAITING' });     // -> controllerchange -> rechargement
+  }
+  function onWaiting(w) {
+    waiting = w;
+    if (running || app.dataset.screen !== 'setup') toast('Mise à jour prête : elle s’installera après la séance', 6000);
+    tryApply();
+  }
+  async function checkUpdate(manual = false) {
+    if (!reg) { if (manual) toast('Mises à jour indisponibles ici'); return; }
+    if (manual) toast('Recherche de mise à jour…', 0);
+    try {
+      await reg.update();
+      if (reg.waiting && navigator.serviceWorker.controller) onWaiting(reg.waiting);
+      else if (reg.installing) { if (manual) toast('Mise à jour en cours de téléchargement…', 4000); }
+      else if (manual) toast(`À jour (version ${VERSION})`);
+    } catch { if (manual) toast('Impossible de vérifier (hors-ligne ?)'); }
+  }
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('controllerchange', () => { if (applying) location.reload(); });
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(r => {
+        reg = r;
+        if (r.waiting && navigator.serviceWorker.controller) onWaiting(r.waiting);
+        r.addEventListener('updatefound', () => {
+          const nw = r.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) onWaiting(nw);
+          });
+        });
+        checkUpdate();
+      }).catch(() => {});
+    });
+    // Vérifie au retour dans l'app, puis toutes les 30 min si elle reste ouverte.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') { checkUpdate(); tryApply(); }
+    });
+    setInterval(checkUpdate, 30 * 60 * 1000);
+    document.addEventListener('focusout', () => setTimeout(tryApply, 300));
+  }
+  $('#verText').textContent = `Version ${VERSION}`;
+  $('#checkUpd').addEventListener('click', () => checkUpdate(true));
+  try {                                    // message après une mise à jour
+    const prev = localStorage.getItem('tabata-version');
+    if (prev && prev !== VERSION) toast(`Mis à jour : version ${VERSION}`, 5000);
+    localStorage.setItem('tabata-version', VERSION);
+  } catch {}
 
   setPhaseAttr('idle');
   renderFields();
